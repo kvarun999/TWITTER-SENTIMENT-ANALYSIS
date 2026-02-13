@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn.functional as F
+import re
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
@@ -14,6 +15,26 @@ load_dotenv()
 # Input Schema
 class SentimentRequest(BaseModel):
     text: str
+
+def clean_text(text):
+    text = text.lower()
+    
+    # Replace HTML breaks specifically with a space to avoid mashing words
+    text = re.sub(r"<br\s*/?>", " ", text)
+    
+    # Remove URLs
+    text = re.sub(r"https?://\S+|www\.\S+", "", text)
+    
+    # Remove HTML tags
+    text = re.sub(r"<.*?>", "", text)
+    
+    # Remove special characters (keep letters & numbers)
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+    
+    # Normalize whitespace
+    text = re.sub(r"\s+", " ", text)
+    
+    return text.strip()
 
 # 1. Startup Event: Load the model here
 @asynccontextmanager
@@ -66,6 +87,7 @@ def predict(request: SentimentRequest):
     if app.state.model is None or app.state.tokenizer is None:
         raise HTTPException(status_code=503, detail="Model is not available")
 
+    cleaned_text = clean_text(request.text)
     tokenizer = app.state.tokenizer
     model = app.state.model
     device = app.state.device
@@ -73,7 +95,7 @@ def predict(request: SentimentRequest):
     try:
         # Tokenize
         inputs = tokenizer(
-            request.text, 
+            cleaned_text, 
             padding="max_length", 
             truncation=True, 
             max_length=128,
@@ -93,7 +115,7 @@ def predict(request: SentimentRequest):
             confidence = probs[0][predicted_class].item()
 
         label_map = {0: "negative", 1: "positive"}
-        
+
         print(next(model.parameters()).device)
 
         return {

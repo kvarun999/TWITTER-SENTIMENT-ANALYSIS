@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+
+# Data & Models (Too large for git)
+data/
+model_output/
+results/
+.env
